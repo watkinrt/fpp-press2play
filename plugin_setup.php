@@ -133,7 +133,7 @@ $led_gpio_list = Array("GPIO12" => 12, "GPIO13" => 13, "GPIO18" => 18)
 <td>
 <?
 //function PrintSettingTextSaved($setting, $restart = 1, $reboot = 0, $maxlength = 32, $size = 32, $pluginName = "", $defaultValue = "", $callbackName = "", $changedFunction = "", $inputType = "text", $sData = Array())
-	PrintSettingTextSaved("press2play_mqtt_portnumber", $restart = 1, $reboot = 0, $maxlength = 10000, $size = 1, $pluginName = $pluginName, $defaultValue = "1883", "", "", "number");
+	PrintSettingTextSaved("press2play_mqtt_portnumber", $restart = 1, $reboot = 0, $maxlength = 65535, $size = 1, $pluginName = $pluginName, $defaultValue = "1883", "", "", "number");
 ?>
 </td>
 </tr>

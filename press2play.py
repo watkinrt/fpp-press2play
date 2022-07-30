@@ -6,6 +6,7 @@ from logging.handlers import RotatingFileHandler
 import requests
 from pathlib import Path
 import socket
+import json
 
 # Setup logging
 logging.basicConfig(level=logging.DEBUG)
@@ -134,8 +135,22 @@ setFppSetting(playerhost, "MQTTPort", portnumber)
 setFppSetting(playerhost, "MQTTClientId", "player")
 # setFppSetting(playerhost, "MQTTPrefix", topic)
 
+# Make sure the player host is setup as a player and that multisync is enabled
+r = requests.get(f"http://{playerhost}.local/api/setting/fppMode")
+response = json.loads(r.text)
+if response["value"] != "player":
+    raise ValueError(f"The specified host system {playerhost} is not set to 'player' mode.")
+setFppSetting(playerhost, "MultiSyncEnabled", "1")
+
 # Restart FPP for the settings to take hold
 r = requests.get(f"http://{playerhost}.local/api/system/fppd/restart")
+if "OK" not in r.text:
+    raise RuntimeError(f"Unable to restart FPP on {playerhost}")
+
+# Make sure the local FPP instance is in remote mode
+setFppSetting("localhost", "fppMode", "remote")
+
+r = requests.get(f"http://localhost/api/system/fppd/restart")
 if "OK" not in r.text:
     raise RuntimeError(f"Unable to restart FPP on {playerhost}")
 
