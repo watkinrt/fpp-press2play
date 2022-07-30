@@ -1,0 +1,18 @@
+{
+	"repoName": "fpp-press2play",
+	"name": "Press-to-play plugin for a remote FPP",
+	"author": "Ryan Watkins (watkinrt)",
+	"description": "A press-to-play plugin intended for a remote FPP. By default, FPP is set to a volume of 0. When a button is pressed, the volume is turned up until the end of the current song, after which the volume is set back to zero.",
+	"homeURL": "https://github.com/watkinrt/fpp-press2play",
+	"srcURL": "https://github.com/watkinrt/fpp-press2play.git",
+	"bugURL": "https://github.com/watkinrt/fpp-press2play/issues",
+	"allowUpdates": 1,
+	"versions": [
+		{
+			"minFPPVersion": "5.0",
+			"maxFPPVersion": "0",
+			"branch": "master",
+			"sha": ""
+		}
+	]
+}

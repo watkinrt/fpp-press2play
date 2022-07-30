@@ -1,9 +1,13 @@
 #!/bin/bash
 
+BASEDIR=$(dirname $0)
+cd $BASEDIR
+cd ..
+
 # Install python3 and its related dependencies
-# sudo apt-get update
-# sudo apt -y install python3 python3-pip
-# pip install gpiozero rpi-gpio paho-mqtt jsonschema
+sudo apt-get update
+sudo apt -y install python3 python3-pip
+pip install gpiozero rpi-gpio paho-mqtt jsonschema
 
 # Enable the MQTT broker service for subsequent reboots
 sudo systemctl enable mosquitto.service
@@ -28,5 +32,7 @@ fi
 # Start the service
 sudo systemctl restart mosquitto.service
 
-
+# Notigy a restart required
+. ${FPPDIR}/scripts/common
+setSetting restartFlag 1
 
