@@ -2,15 +2,24 @@ import paho.mqtt.client as mqtt
 from gpiozero import Button, PWMLED
 import subprocess
 import logging
-import json
-from jsonschema import validate
+from logging.handlers import RotatingFileHandler
 import requests
 from pathlib import Path
 import socket
 
 # Setup logging
-logging.basicConfig()
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+# logger.setLevel(logging.NOTSET)
+fhandler = RotatingFileHandler(Path(__file__).parent / Path("fpp-press2play.log"), 
+                              maxBytes=100e3,
+                              backupCount=2)
+fhandler.setLevel(logging.DEBUG)
+logger.addHandler(fhandler)
+shandler = logging.StreamHandler()
+shandler.setLevel(logging.DEBUG)
+logger.addHandler(shandler)
+# logging.basicConfig(level=logging.INFO)
 
 # Global FPP status string (falcon/player/{hostname}/status)
 fppStatus = ''
@@ -21,132 +30,77 @@ hostname = output.stdout
 logger.debug(f"FPP hostname: {hostname}")
 
 # Load config file
-with open(Path(__file__).parent / Path("config.json"), "r") as f:
-    config = json.load(f)
+configFilename = Path("/home/fpp/media/config/plugin.fpp-press2play")
+config = {}
+with open(configFilename, "r") as f:
+    for line in f:
+        var, _ = line.split(" = ")
+        value = line.split('"')
+        config[var] = value[1]
+    
 logger.debug(f"Config: {config}")
-
-# Configuration schema
-schema = {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/product.schema.json",
-  "title": "press2play configurations schema",
-  "description": "Configuration format for press2play options",
-  "type": "object",
-  "properties": {
-    "volume": {
-      "description": "Desired music volume in the range 1 to 100",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 100,
-      "default": 70
-    },
-    "player": {
-        "description": "FPP player hostname",
-        "type": "string",
-        "default": "fpp.local"
-    },
-    "mqtt": {
-      "type": "object",
-      "properties": {
-        "hostname": {
-            "description": "MQTT broker hostname or IP address",
-            "type": "string",
-            "format": "ipv4",
-            # "oneOf": [
-            #     { "format": "hostname" },
-            #     { "format": "ipv4" }
-            # ]
-        },
-        "port": {
-            "description": "MQTT broker port number",
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "default": 1883
-        },
-        "topic": {
-            "description": "FPP MQTT topic",
-            "type": "string",
-            "default": "FPP"
-        },
-      },
-      "required": ["hostname"]
-    },
-    "gpio": {
-      "type": "object",
-      "properties": {
-        "buttonpin": {
-            "description": "Button GPIO pin",
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 40,
-            "default": 18 
-        },
-        "ledpin": {
-            "description": "LED GPIO pin (required to be PWM compatible)",
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 40,
-            "default": 26 
-        },
-        "debounce": {
-            "description": "Button debounce time in seconds",
-            "type": "number",
-            "exclusiveMinimum": 0,
-            "maximum": 1,
-            "default": 0.3
-        },
-      },
-      "required": ["buttonpin", "ledpin", "debounce"]
-    },
-  },
-  "required": ["volume", "mqtt", "gpio"]
-}
-
-# Validate configuration file
-validate(instance=config, schema=schema)
 
 # Pull out the volume
 try:
-    maxvolume = config["volume"]
+    maxvolume = int(config["press2play_volume"])
+    if maxvolume > 100:
+        maxvolume = 100
+    elif maxvolume < 1:
+        maxvolume = 1
 except:
     maxvolume = 70
     logger.warning("Output volume was not defined in the config file. "
                   "Defaulting to 70%.")
+config["press2play_volume"] = str(maxvolume)
 
 # Create RPi button with specified debouncing time
 try:
-    buttonpin = config['gpio']['buttonpin']
-except KeyError:
+    buttonpin = int(config['press2play_gpio_buttonpin'])
+except:
     logger.warning("A button GPIO pin was not found in the config file. "
                   "Defaulting to 18.")
     buttonpin = 18
+config["press2play_gpio_buttonpin"] = str(buttonpin)
 
 try:
-    debounceTime = config['gpio']['debounce']
-except KeyError:
+    debounceTime = float(config['press2play_gpio_debounce'])
+except:
     logger.warning("A button debounce time was not found in the config file. "
                   "Defaulting to 0.3.")
     debounceTime = 0.3
+config["press2play_gpio_debounce"] = str(debounceTime)
 
 button = Button(buttonpin, pull_up=True, bounce_time=debounceTime)
 
 # Create RPi led
 try:
-    ledpin = config['gpio']['ledpin']
-except KeyError:
+    ledpin = int(config["press2play_gpio_ledpin"])
+except:
     logger.warning("An LED GPIO pin was not found in the config file. "
                  "Defaulting to 26.")
     ledpin = 26
+config["press2play_gpio_ledpin"] = str(ledpin)
+
 led = PWMLED(ledpin)
 
 # Setup Player and Remote MQTT using the REST API
-playerhost = config["player"]
-try:
-    topic = config["mqtt"]["topic"]
-except KeyError:
-    topic = "FPP"
 
-brokername = config["mqtt"]["hostname"]
+try:
+    playerhost = config["press2play_playername"]
+except:
+    logger.warning("playerhost was not found in the config file. "
+                 "Defaulting to FPP.")
+    playerhost = "FPP"
+config["press2play_playername"] = playerhost
+
+try:
+    brokername = config["press2play_mqtt_hostname"]
+except:
+    logger.warning("MQTT broker was not found in the config file. "
+                   "Defaulting to localhost.")
+    brokername = "localhost"
+config["press2play_mqtt_hostname"] = brokername
+
 if brokername == "localhost" or brokername == "127.0. 0.1":
     # Get the MQTT hostname is accessible across the network if local host is specified.
     brokername = socket.gethostname()+".local"
@@ -155,11 +109,17 @@ if brokername == "localhost" or brokername == "127.0. 0.1":
     portnumber = 1883
 else:
     try:
-        portnumber = config["mqtt"]["portnumber"]
-    except KeyError:
+        portnumber = int(config["press2play_mqtt_portnumber"])
+    except:
         portnumber = 1883
         logger.warning("MQTT broker port number wasn't specified in the config file. "
                         "Defaulting to 1883.")
+config["press2play_mqtt_portnumber"] = str(portnumber)
+
+# Update the config file to be consistent with the error faulted values
+with open(configFilename, "w") as f:
+    for k, v in config.items():
+        f.write(f'{k} = "{v}"\n')
 
 def setFppSetting(hostname, setting, value):
     # mqtt": { "description": "MQTT", "settings": [ "MQTTHost", "MQTTPort", "MQTTClientId", "MQTTPrefix", "MQTTUsername", "MQTTPassword", "MQTTCaFile", "MQTTFrequency", "MQTTSubscribe" ] }

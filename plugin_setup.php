@@ -2,7 +2,7 @@
 include_once "/opt/fpp/www/common.php"; //Alows use of FPP Functions
 $pluginName = basename(dirname(__FILE__));
 $pluginConfigFile = $settings['configDirectory'] ."/plugin." .$pluginName; //gets path to configuration files for plugin
-    
+
 if (file_exists($pluginConfigFile)) {
 	$pluginSettings = parse_ini_file($pluginConfigFile);
 }
@@ -48,8 +48,36 @@ if ($madeChange) {
 	$pluginSettings = parse_ini_file($pluginConfigFile);
 }
 
-$button_gpio_list = Array(3, 5, 7, 8, 10, 11, 12, 13, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27, 28, 29, 31, 32, 33, 34, 35, 36, 37, 38, 40);
-$led_gpio_list = Array(12, 13, 18)
+$button_gpio_list = Array(
+	"GPIO03" => 3, 
+	"GPIO05" => 5, 
+	"GPIO07" => 7, 
+	"GPIO08" => 8, 
+	"GPIO10" => 10, 
+	"GPIO11" => 11, 
+	"GPIO15" => 15, 
+	"GPIO16" => 16, 
+	"GPIO17" => 17, 
+	"GPIO19" => 19, 
+	"GPIO21" => 21, 
+	"GPIO22" => 22, 
+	"GPIO23" => 23, 
+	"GPIO24" => 24, 
+	"GPIO25" => 25, 
+	"GPIO26" => 26, 
+	"GPIO27" => 27, 
+	"GPIO28" => 28, 
+	"GPIO29" => 29, 
+	"GPIO31" => 31, 
+	"GPIO32" => 32, 
+	"GPIO33" => 33, 
+	"GPIO34" => 34, 
+	"GPIO35" => 35, 
+	"GPIO36" => 36, 
+	"GPIO37" => 37, 
+	"GPIO38" => 38, 
+	"GPIO40" => 40);
+$led_gpio_list = Array("GPIO12" => 12, "GPIO13" => 13, "GPIO18" => 18)
 
 ?>
 
@@ -74,7 +102,7 @@ $led_gpio_list = Array(12, 13, 18)
 <td>
 <?
 //function PrintSettingTextSaved($setting, $restart = 1, $reboot = 0, $maxlength = 32, $size = 32, $pluginName = "", $defaultValue = "", $callbackName = "", $changedFunction = "", $inputType = "text", $sData = Array())
-	PrintSettingTextSaved("press2play_volume", $restart = 1, $reboot = 0, $maxlength = 100, $size = 1, $inputType = "number", $pluginName = $pluginName, $defaultValue = "70");
+	PrintSettingTextSaved("press2play_volume", $restart = 1, $reboot = 0, $maxlength = 100, $size = 1, $pluginName = $pluginName, $defaultValue = "70", "", "", "number");
 ?>
 </td>
 </tr>
@@ -84,7 +112,7 @@ $led_gpio_list = Array(12, 13, 18)
 <td>
 <?
 //function PrintSettingPasswordSaved($setting, $restart = 1, $reboot = 0, $maxlength = 32, $size = 32, $pluginName = "", $defaultValue = "", $callbackName = "", $changedFunction = "")
-	PrintSettingPasswordSaved("press2play_playername", $restart = 1, $reboot = 0, $maxlength = 50, $size = 32, $pluginName = $pluginName, $defaultValue = "FPP");
+	PrintSettingTextSaved("press2play_playername", $restart = 1, $reboot = 0, $maxlength = 50, $size = 32, $pluginName = $pluginName, $defaultValue = "FPP");
 ?>
 </td>
 </tr>
@@ -105,7 +133,7 @@ $led_gpio_list = Array(12, 13, 18)
 <td>
 <?
 //function PrintSettingTextSaved($setting, $restart = 1, $reboot = 0, $maxlength = 32, $size = 32, $pluginName = "", $defaultValue = "", $callbackName = "", $changedFunction = "", $inputType = "text", $sData = Array())
-	PrintSettingTextSaved("press2play_mqtt_portnumber", $restart = 1, $reboot = 0, $maxlength = 10000, $size = 1, $inputType = "number", $pluginName = $pluginName, $defaultValue = "1883");
+	PrintSettingTextSaved("press2play_mqtt_portnumber", $restart = 1, $reboot = 0, $maxlength = 10000, $size = 1, $pluginName = $pluginName, $defaultValue = "1883", "", "", "number");
 ?>
 </td>
 </tr>
@@ -116,7 +144,7 @@ $led_gpio_list = Array(12, 13, 18)
 <td>
 <?
 //function PrintSettingTextSaved($setting, $restart = 1, $reboot = 0, $maxlength = 32, $size = 32, $pluginName = "", $defaultValue = "", $callbackName = "", $changedFunction = "", $inputType = "text", $sData = Array())
-	PrintSettingSelect("Button GPIO pin", "button_gpio_list", $restart = 1, $reboot = 0, "26", $playlists, $pluginName);	
+	PrintSettingSelect("Button GPIO pin", "press2play_gpio_buttonpin", $restart = 1, $reboot = 0, "26", $button_gpio_list, $pluginName);	
 ?>
 </td>
 </tr>
@@ -126,7 +154,7 @@ $led_gpio_list = Array(12, 13, 18)
 <td>
 <?
 	// function PrintSettingSelect($title, $setting, $restart = 1, $reboot = 0, $defaultValue, $values, $pluginName = "", $callbackName = "", $changedFunction = "", $sData = Array())
-	PrintSettingTextSaved("press2play_gpio_debounce", $restart = 1, $reboot = 0, $maxlength = 1, $size = 0, $inputType = "number", $pluginName = $pluginName, $defaultValue = "0.3");
+	PrintSettingTextSaved("press2play_gpio_debounce", $restart = 1, $reboot = 0, $maxlength = 1, $size = 0, $pluginName = $pluginName, $defaultValue = "0.3", "", "", "number");
 ?>
 </td>
 </tr>
@@ -135,7 +163,7 @@ $led_gpio_list = Array(12, 13, 18)
 	<th style="text-align: left">LED GPIO pin</th>
 <td>
 <?
-	PrintSettingSelect("LED GPIO pin", "led_gpio_list", $restart = 1, $reboot = 0, "18", $playlists, $pluginName);
+	PrintSettingSelect("LED GPIO pin", "press2play_gpio_ledpin", $restart = 1, $reboot = 0, "18", $led_gpio_list, $pluginName);
 ?>
 </td>
 </tr>
