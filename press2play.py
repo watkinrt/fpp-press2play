@@ -39,7 +39,7 @@ with open(configFilename, "r") as f:
         value = line.split('"')
         config[var] = value[1]
     
-logger.debug(f"Config: {config}")
+logger.debug(f"Read in config: {config}")
 
 # Pull out the volume
 try:
@@ -102,9 +102,10 @@ except:
     brokername = "localhost"
 config["press2play_mqtt_hostname"] = brokername
 
-if brokername == "localhost" or brokername == "127.0. 0.1":
+localhost = socket.gethostname()
+if brokername == "localhost" or brokername == "127.0.0.1":
     # Get the MQTT hostname is accessible across the network if local host is specified.
-    brokername = socket.gethostname()+".local"
+    brokername = localhost+".local"
 
     # Use localhost portnumber
     portnumber = 1883
@@ -122,12 +123,27 @@ with open(configFilename, "w") as f:
     for k, v in config.items():
         f.write(f'{k} = "{v}"\n')
 
+logger.debug(f"Updated config: {config}")
+
+restartFlag = {localhost: False, playerhost: False}
+
 def setFppSetting(hostname, setting, value):
     # mqtt": { "description": "MQTT", "settings": [ "MQTTHost", "MQTTPort", "MQTTClientId", "MQTTPrefix", "MQTTUsername", "MQTTPassword", "MQTTCaFile", "MQTTFrequency", "MQTTSubscribe" ] }
     # /api/settings/MQTTHost
-    r = requests.put(f"http://{hostname}.local/api/settings/{setting}", data=f"{value}")
-    if "OK" not in r.text:
-        raise RuntimeError(f"Unable to set {setting} to {value} on {hostname}")
+    try:
+        # Check the curret setting value
+        r = requests.get(f"http://{hostname}.local/api/settings/{setting}")
+        current = json.loads(r.text)
+        if current['value'] == value:
+            logger.debug(f"Setting {setting} on {hostname} is already set to {value}.")
+            return
+
+        r = requests.put(f"http://{hostname}.local/api/settings/{setting}", data=f"{value}")
+        if "OK" not in r.text:
+            raise RuntimeError(f"Unable to set {setting} to {value} on {hostname}")
+        restartFlag[hostname] = True
+    except Exception as ex:
+        logger.debug(f"Unable to set {setting} to {value} on {hostname}: {ex}")
 
 # Setup MQTT on primary player instance
 setFppSetting(playerhost, "MQTTHost", brokername)
@@ -136,23 +152,26 @@ setFppSetting(playerhost, "MQTTClientId", "player")
 # setFppSetting(playerhost, "MQTTPrefix", topic)
 
 # Make sure the player host is setup as a player and that multisync is enabled
-r = requests.get(f"http://{playerhost}.local/api/setting/fppMode")
+r = requests.get(f"http://{playerhost}.local/api/settings/fppMode")
 response = json.loads(r.text)
 if response["value"] != "player":
     raise ValueError(f"The specified host system {playerhost} is not set to 'player' mode.")
 setFppSetting(playerhost, "MultiSyncEnabled", "1")
 
-# Restart FPP for the settings to take hold
-r = requests.get(f"http://{playerhost}.local/api/system/fppd/restart")
-if "OK" not in r.text:
-    raise RuntimeError(f"Unable to restart FPP on {playerhost}")
+# Restart player if a setting was changed
+if restartFlag[playerhost]:
+    r = requests.get(f"http://{playerhost}.local/api/system/fppd/restart")
+    if "OK" not in r.text:
+        raise RuntimeError(f"Unable to restart FPP on {playerhost}")
 
 # Make sure the local FPP instance is in remote mode
-setFppSetting("localhost", "fppMode", "remote")
+setFppSetting(localhost, "fppMode", "remote")
 
-r = requests.get(f"http://localhost/api/system/fppd/restart")
-if "OK" not in r.text:
-    raise RuntimeError(f"Unable to restart FPP on {playerhost}")
+# Restart fppd if a setting was changed
+if restartFlag[localhost]:
+    r = requests.get(f"http://{localhost}.local/api/system/fppd/restart")
+    if "OK" not in r.text:
+        raise RuntimeError(f"Unable to restart FPP on {localhost}")
 
 def setVolume(volume):
     """ Adjust FPP volume 
