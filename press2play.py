@@ -12,12 +12,16 @@ import json
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 # logger.setLevel(logging.NOTSET)
+formatter = logging.Formatter(fmt='%(asctime)s %(levelname)-8s %(message)s',
+                              datefmt='%Y-%m-%d %H:%M:%S')
 fhandler = RotatingFileHandler(Path(__file__).parent / Path("fpp-press2play.log"), 
                               maxBytes=100e3,
                               backupCount=2)
 fhandler.setLevel(logging.DEBUG)
+fhandler.setFormatter(formatter)
 logger.addHandler(fhandler)
 shandler = logging.StreamHandler()
+shandler.setFormatter(formatter)
 shandler.setLevel(logging.DEBUG)
 logger.addHandler(shandler)
 # logging.basicConfig(level=logging.INFO)
@@ -128,6 +132,7 @@ logger.debug(f"Updated config: {config}")
 restartFlag = {localhost: False, playerhost: False}
 
 def setFppSetting(hostname, setting, value):
+    global restartFlag
     # mqtt": { "description": "MQTT", "settings": [ "MQTTHost", "MQTTPort", "MQTTClientId", "MQTTPrefix", "MQTTUsername", "MQTTPassword", "MQTTCaFile", "MQTTFrequency", "MQTTSubscribe" ] }
     # /api/settings/MQTTHost
     try:
