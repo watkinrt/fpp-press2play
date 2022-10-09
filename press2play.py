@@ -26,6 +26,28 @@ shandler.setLevel(logging.DEBUG)
 logger.addHandler(shandler)
 # logging.basicConfig(level=logging.INFO)
 
+def setVolume(volume):
+    """ Adjust FPP volume 
+    
+    Arguments
+    ---------
+    volume: integer in the range of 0 to 100
+        New FPP volume setting
+    """
+
+    # Make sure volume is in the right form and bounds
+    volume = int(volume)
+    if volume < 0:
+        volume = 0
+    elif volume > 100:
+        volume = 100
+
+    logger.debug(f"Setting volume to {volume}")
+    subprocess.run(['/opt/fpp/src/fpp', '-v', f'{volume}'])
+
+# Make sure the volume is off
+setVolume(0)
+
 # Global FPP status string (falcon/player/{hostname}/status)
 fppStatus = ''
 
@@ -71,11 +93,12 @@ try:
     debounceTime = float(config['press2play_gpio_debounce'])
 except:
     logger.warning("A button debounce time was not found in the config file. "
-                  "Defaulting to 0.3.")
-    debounceTime = 0.3
+                  "Defaulting to None.")
+    debounceTime = None
 config["press2play_gpio_debounce"] = str(debounceTime)
 
-button = Button(buttonpin, pull_up=True, bounce_time=debounceTime)
+# button = Button(buttonpin, pull_up=True, bounce_time=debounceTime)
+button = Button(buttonpin, pull_up=True, bounce_time=None)
 
 # Create RPi led
 try:
@@ -139,7 +162,7 @@ def setFppSetting(hostname, setting, value):
         # Check the curret setting value
         r = requests.get(f"http://{hostname}.local/api/settings/{setting}")
         current = json.loads(r.text)
-        if current['value'] == value:
+        if current['value'] == str(value):
             logger.debug(f"Setting {setting} on {hostname} is already set to {value}.")
             return
 
@@ -172,30 +195,15 @@ if restartFlag[playerhost]:
 # Make sure the local FPP instance is in remote mode
 setFppSetting(localhost, "fppMode", "remote")
 
+# Turn off IP audio output on boot
+# /api/settings/disableIPAnnouncement
+setFppSetting(localhost, "disableIPAnnouncement", "1")
+
 # Restart fppd if a setting was changed
 if restartFlag[localhost]:
     r = requests.get(f"http://{localhost}.local/api/system/fppd/restart")
     if "OK" not in r.text:
         raise RuntimeError(f"Unable to restart FPP on {localhost}")
-
-def setVolume(volume):
-    """ Adjust FPP volume 
-    
-    Arguments
-    ---------
-    volume: integer in the range of 0 to 100
-        New FPP volume setting
-    """
-
-    # Make sure volume is in the right form and bounds
-    volume = int(volume)
-    if volume < 0:
-        volume = 0
-    elif volume > 100:
-        volume = 100
-
-    logger.debug(f"Setting volume to {volume}")
-    subprocess.run(['/opt/fpp/src/fpp', '-v', f'{volume}'])
 
 def setStatusLights(status):
     """ Set the kiosk status lights state """
@@ -247,11 +255,13 @@ def onMessage(client, userdata, msg):
 
 def onButtonPress():
     """ Update volume and status state when the button is pressed """
-    global maxvolume
+    global maxvolume, fppStatus
 
     logger.debug("Press2play button pressed.")
-    # Turn on FPP volume
-    setVolume(maxvolume)
+    if 'playing' in fppStatus:
+        logger.debug("A song is playing. Turning up the volume to {maxVolume}")
+        # Turn on FPP volume
+        setVolume(maxvolume)
 
     # Turn off FPP status lights
     setStatusLights(False)
