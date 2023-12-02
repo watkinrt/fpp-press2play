@@ -1,13 +1,9 @@
 {
     "volume": 70,
-    "player": "FPP",
-    "mqtt": {
-        "hostname": "localhost",
-        "port": 1883
-    },
+    "player": "fpp.local",
     "gpio": {
         "buttonpin": 26,
-        "debounce": 0.3,
+        "debounce": 0,
         "ledpin": 18
     }
 }

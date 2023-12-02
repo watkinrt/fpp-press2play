@@ -7,10 +7,21 @@ from jsonschema import validate
 import requests
 from pathlib import Path
 import socket
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from threading import Timer
+
+# Watchdog flag
+watchdog = False
+
+class RepeatTimer(Timer):
+    def run(self):
+        while not self.finished.wait(self.interval):
+            self.function(*self.args, **self.kwargs)
 
 # Setup logging
 logging.basicConfig()
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 # Global FPP status string (falcon/player/{hostname}/status)
 fppStatus = ''
@@ -45,32 +56,32 @@ schema = {
         "type": "string",
         "default": "fpp.local"
     },
-    "mqtt": {
-      "type": "object",
-      "properties": {
-        "hostname": {
-            "description": "MQTT broker hostname or IP address",
-            "type": "string",
-            "format": "ipv4",
-            # "oneOf": [
-            #     { "format": "hostname" },
-            #     { "format": "ipv4" }
-            # ]
-        },
-        "port": {
-            "description": "MQTT broker port number",
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "default": 1883
-        },
-        "topic": {
-            "description": "FPP MQTT topic",
-            "type": "string",
-            "default": "FPP"
-        },
-      },
-      "required": ["hostname"]
-    },
+    # "mqtt": {
+    #   "type": "object",
+    #   "properties": {
+    #     "hostname": {
+    #         "description": "MQTT broker hostname or IP address",
+    #         "type": "string",
+    #         "format": "ipv4",
+    #         # "oneOf": [
+    #         #     { "format": "hostname" },
+    #         #     { "format": "ipv4" }
+    #         # ]
+    #     },
+    #     "port": {
+    #         "description": "MQTT broker port number",
+    #         "type": "integer",
+    #         "exclusiveMinimum": 0,
+    #         "default": 1883
+    #     },
+    #     "topic": {
+    #         "description": "FPP MQTT topic",
+    #         "type": "string",
+    #         "default": "FPP"
+    #     },
+    #   },
+    #   "required": ["hostname"]
+    # },
     "gpio": {
       "type": "object",
       "properties": {
@@ -79,19 +90,19 @@ schema = {
             "type": "integer",
             "exclusiveMinimum": 0,
             "maximum": 40,
-            "default": 18 
+            "default": 26 
         },
         "ledpin": {
             "description": "LED GPIO pin (required to be PWM compatible)",
             "type": "integer",
             "exclusiveMinimum": 0,
             "maximum": 40,
-            "default": 26 
+            "default": 18 
         },
         "debounce": {
             "description": "Button debounce time in seconds",
             "type": "number",
-            "exclusiveMinimum": 0,
+            "inclusiveMinimum": 0,
             "maximum": 1,
             "default": 0.3
         },
@@ -99,11 +110,12 @@ schema = {
       "required": ["buttonpin", "ledpin", "debounce"]
     },
   },
-  "required": ["volume", "mqtt", "gpio"]
+  "required": ["volume", "player", "gpio"]
 }
 
 # Validate configuration file
 validate(instance=config, schema=schema)
+
 
 # Pull out the volume
 try:
@@ -118,15 +130,21 @@ try:
     buttonpin = config['gpio']['buttonpin']
 except KeyError:
     logger.warning("A button GPIO pin was not found in the config file. "
-                  "Defaulting to 18.")
-    buttonpin = 18
+                  "Defaulting to 26.")
+    buttonpin = 26
 
 try:
     debounceTime = config['gpio']['debounce']
 except KeyError:
     logger.warning("A button debounce time was not found in the config file. "
-                  "Defaulting to 0.3.")
-    debounceTime = 0.3
+                  "Defaulting to none.")
+    debounceTime = None
+
+try:
+    if debounceTime < 0.0001:
+        debounceTime = None
+except:
+    devounceTime = None
 
 button = Button(buttonpin, pull_up=True, bounce_time=debounceTime)
 
@@ -135,49 +153,52 @@ try:
     ledpin = config['gpio']['ledpin']
 except KeyError:
     logger.warning("An LED GPIO pin was not found in the config file. "
-                 "Defaulting to 26.")
-    ledpin = 26
+                 "Defaulting to 18.")
+    ledpin = 18
 led = PWMLED(ledpin)
 
 # Setup Player and Remote MQTT using the REST API
-playerhost = config["player"]
 try:
-    topic = config["mqtt"]["topic"]
+    playerhost = config["player"]
 except KeyError:
-    topic = "FPP"
-
-brokername = config["mqtt"]["hostname"]
-if brokername == "localhost" or brokername == "127.0. 0.1":
-    # Get the MQTT hostname is accessible across the network if local host is specified.
-    brokername = socket.gethostname()+".local"
-
-    # Use localhost portnumber
-    portnumber = 1883
-else:
-    try:
-        portnumber = config["mqtt"]["portnumber"]
-    except KeyError:
-        portnumber = 1883
-        logger.warning("MQTT broker port number wasn't specified in the config file. "
-                        "Defaulting to 1883.")
+    logger.warning("An FPP hostname was not found in the config file. "
+                 "Defaulting to 'fpp.local'.")
+    playerhost = "fpp.local"
 
 def setFppSetting(hostname, setting, value):
     # mqtt": { "description": "MQTT", "settings": [ "MQTTHost", "MQTTPort", "MQTTClientId", "MQTTPrefix", "MQTTUsername", "MQTTPassword", "MQTTCaFile", "MQTTFrequency", "MQTTSubscribe" ] }
     # /api/settings/MQTTHost
-    r = requests.put(f"http://{hostname}.local/api/settings/{setting}", data=f"{value}")
+    r = requests.put(f"http://{hostname}/api/settings/{setting}", data=f"{value}")
     if "OK" not in r.text:
         raise RuntimeError(f"Unable to set {setting} to {value} on {hostname}")
 
-# Setup MQTT on primary player instance
-setFppSetting(playerhost, "MQTTHost", brokername)
-setFppSetting(playerhost, "MQTTPort", portnumber)
-setFppSetting(playerhost, "MQTTClientId", "player")
-# setFppSetting(playerhost, "MQTTPrefix", topic)
+# Make sure device is set to remote
+r = requests.get(f"http://localhost/api/settings/fppMode")
+settings = json.loads(r.text)
+logger.debug(f"Press2play fpp mode: {settings}.")
+if "remote" in settings['value']:
+    logger.debug("Already in remote mode.")
+else:
+    logger.debug("Not in remote mode. Changing from player to remote mode.")
+    setFppSetting("localhost", "fppMode", "remote")
+    # # Restart FPP for the settings to take hold
+    # r = requests.get(f"http://localhost/api/system/fppd/restart")
+    # if "OK" not in r.text:
+    #     raise RuntimeError(f"Unable to restart FPPD")
 
-# Restart FPP for the settings to take hold
-r = requests.get(f"http://{playerhost}.local/api/system/fppd/restart")
-if "OK" not in r.text:
-    raise RuntimeError(f"Unable to restart FPP on {playerhost}")
+# Make sure the primary player is setup to emit multisync packets
+r = requests.get(f"http://{playerhost}/api/settings/MultiSyncEnabled")
+settings = json.loads(r.text)
+logger.debug(f"Player MultiSync mode: {settings}.")
+if settings["value"] == "1":
+    logger.debug("Player MultiSync already setup.")
+else:
+    logger.debug("Player not emmitting multisync packets. Enabling.")
+    setFppSetting(playerhost, "MultiSyncEnabled", "1")
+    # # Restart FPP for the settings to take hold
+    # r = requests.get(f"http://{playerhost}/api/system/fppd/restart")
+    # if "OK" not in r.text:
+    #     raise RuntimeError(f"Unable to restart FPPD on player")
 
 def setVolume(volume):
     """ Adjust FPP volume 
@@ -187,7 +208,7 @@ def setVolume(volume):
     volume: integer in the range of 0 to 100
         New FPP volume setting
     """
-
+    watchdog = False
     # Make sure volume is in the right form and bounds
     volume = int(volume)
     if volume < 0:
@@ -201,72 +222,108 @@ def setVolume(volume):
 def setStatusLights(status):
     """ Set the kiosk status lights state """
     logger.debug(f"Setting the status lights to {'on' if status else 'off'}")
+    watchdog = False
     if status:
         led.blink(on_time=1, off_time=1, fade_in_time=1, fade_out_time=1, background=True)
     else:
         led.off()
 
-# The callback for when the client receives a CONNACK response from the server.
-def onConnect(client, userdata, flags, rc):
-    logger.debug(f"Connected to MQTT broker with result code {rc}")
+def fppdStatus():
+    """ Get the currently playing sequence """
 
-    # Subscribing in on_connect() means that if we lose the connection and
-    # reconnect then subscriptions will be renewed.
-    topic = f"falcon/player/{playerhost}/status"
-    client.subscribe(topic)
-    logger.debug(f"Subscribed to {topic} on {playerhost}")
+    logger.debug("Press2play status requested.")
+    # Determine what the current system volume state is, 
+    # which can only be queried through the REST api
+    r = requests.get("http://localhost/api/fppd/status")
+    status = json.loads(r.text)
+    logger.debug(f"Press2play status: {status}.")
+    return status
 
-    topic = f"falcon/player/{playerhost}/playlist/sectionPosition/status"
-    client.subscribe(topic)
-    client.subscribe(topic)
-    logger.debug(f"Subscribed to {topic} on {playerhost}")
+def toggleState():
+    """ Toggle the current kiosk state """
+    global maxvolume
 
-# The callback for when a PUBLISH message is received from the server.
-def onMessage(client, userdata, msg):
-    global fppStatus
-    logger.debug(msg.topic+" "+str(msg.payload))
-    if msg.topic == f"falcon/player/{playerhost}/status":
-        # FPP player state changed.
-        fppStatus = msg.payload.decode()
-        if 'playing' in fppStatus:
-            # FPP switched to playing. Make sure the volume is off
-            # and that the kiosk is on
-            logger.debug("FPP started playing.")
-            setVolume(0)
-            setStatusLights(True)
-        else:
-            # Otherwise, make sure the volume is off and the status lights are on
-            logger.debug("FPP is no longer playing.")
-            setVolume(0)
-            setStatusLights(False)
-    elif msg.topic == f"falcon/player/{playerhost}/playlist/sectionPosition/status" and fppStatus == "playing":
-        # FPP song changed.
-        songNumber = int(msg.payload.decode())
-        logger.debug("FPP song changed.")
-        setVolume(0)
+    logger.debug("Press2play toggle state requested.")
+    # Determine what the current system volume state is, 
+    # which can only be queried through the REST api
+    r = requests.get("http://localhost/api/fppd/volume")
+    response = json.loads(r.text)
+    volume = int(response['volume'])
+    logger.debug(f"Press2play current volume state: {volume}.")
+    if volume:
+        # If the volume is on, turn it off and set the status lights on
         setStatusLights(True)
+        setVolume(0)
+    else:
+        # If the volume is off, turn it on and turn off the status lights
+        setStatusLights(False)
+        setVolume(maxvolume)
 
 def onButtonPress():
     """ Update volume and status state when the button is pressed """
-    global maxvolume
+    # global maxvolume
 
     logger.debug("Press2play button pressed.")
-    # Turn on FPP volume
-    setVolume(maxvolume)
+    status = fppdStatus()
+    if status["current_sequence"]:
+        toggleState()
+    else:
+        setVolume(0)
+        setStatusLights(False)
 
-    # Turn off FPP status lights
-    setStatusLights(False)
+
+def watchdogTimer():
+    global watchdog
+
+    if watchdog:
+        logger.debug("Watchdog timer hasn't been fed in a while. Turning everything off.")
+        setVolume(0)
+        setStatusLights(False)
+    else:
+        watchdog = True
+
+# There isn't any easy way within FPP to blink a GPIO LED (with fading).
+# So, we setup and HTTP server here to handle these requets.
+class RequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        try:
+            if self.path == '/LED_off':
+                # Insert your code here
+                setStatusLights(False)
+            elif self.path == '/LED_on':
+                setStatusLights(True)
+            elif self.path == "/state_toggle":
+                toggleState()
+            elif self.path == "/state_on":
+                setStatusLights(False)
+                setVolume(maxvolume)
+            elif self.path == "/state_off":
+                setStatusLights(True)
+                setVolume(0)
+            
+            # Send success status
+            self.send_response(200)
+        except Exception as ex:
+            logger.error(f"Unagle to completed http request '{self.path}': {ex}")
+            self.send_response(500)
+
 
 if __name__ == '__main__':
 
     # Setup button press callback
     button.when_pressed = onButtonPress
 
-    # Setup MQTT client to track FPP events
-    client = mqtt.Client()
-    client.on_connect = onConnect
-    client.on_message = onMessage
-    client.connect(brokername, portnumber, 60)
+    httpd = HTTPServer(("", 8081), RequestHandler)
+
+    # Set the initial system state
+    setVolume(0)
+    status = fppdStatus()
+    if status["current_sequence"]:
+        setStatusLights(True)
+
+    # Setup watchdog timer for 10 minutes
+    timer = RepeatTimer(10*60, watchdogTimer)
+    timer.start()
 
     # Blocking call that processes network traffic, dispatches callbacks and
     # handles reconnecting.
@@ -274,6 +331,8 @@ if __name__ == '__main__':
     # manual interface.
     # Catch exceptions to allow gpiozero to run its cleanup operations
     try:
-        client.loop_forever()
+        httpd.serve_forever()
     except:
         logger.debug("press2play terminated. Cleaning up.")
+        setVolume(0)
+        setStatusLights(False)

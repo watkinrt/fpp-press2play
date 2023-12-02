@@ -15,19 +15,19 @@ if (strlen(urldecode($pluginSettings['press2play_volume']))<1){
 }
 
 if (strlen(urldecode($pluginSettings['press2play_playername']))<1){
-	WriteSettingToFile("press2play_playername","FPP",$pluginName);
+	WriteSettingToFile("press2play_playername","fpp.local",$pluginName);
 	$madeChange = true;
 }
 
-if (strlen(urldecode($pluginSettings['press2play_mqtt_hostname']))<1){
-	WriteSettingToFile("press2play_mqtt_hostname","localhost",$pluginName);
-	$madeChange = true;
-}
+// if (strlen(urldecode($pluginSettings['press2play_mqtt_hostname']))<1){
+// 	WriteSettingToFile("press2play_mqtt_hostname","localhost",$pluginName);
+// 	$madeChange = true;
+// }
 
-if (strlen(urldecode($pluginSettings['press2play_mqtt_portnumber']))<1){
-	WriteSettingToFile("press2play_mqtt_portnumber","1883",$pluginName);
-	$madeChange = true;
-}
+// if (strlen(urldecode($pluginSettings['press2play_mqtt_portnumber']))<1){
+// 	WriteSettingToFile("press2play_mqtt_portnumber","1883",$pluginName);
+// 	$madeChange = true;
+// }
 
 if (strlen(urldecode($pluginSettings['press2play_gpio_buttonpin']))<1){
 	WriteSettingToFile("press2play_gpio_buttonpin","26",$pluginName);
@@ -40,7 +40,7 @@ if (strlen(urldecode($pluginSettings['press2play_gpio_ledpin']))<1){
 }
 
 if (strlen(urldecode($pluginSettings['press2play_gpio_debounce']))<1){
-	WriteSettingToFile("press2play_gpio_debounce","0.3",$pluginName);
+	WriteSettingToFile("press2play_gpio_debounce","0",$pluginName);
 	$madeChange = true;
 }
 
@@ -89,7 +89,7 @@ $led_gpio_list = Array(12, 13, 18)
 </td>
 </tr>
 
-
+<!-- 
 <tr>
 	<th style="text-align: left">MQTT broker</th>
 <td>
@@ -108,7 +108,7 @@ $led_gpio_list = Array(12, 13, 18)
 	PrintSettingTextSaved("press2play_mqtt_portnumber", $restart = 1, $reboot = 0, $maxlength = 10000, $size = 1, $inputType = "number", $pluginName = $pluginName, $defaultValue = "1883");
 ?>
 </td>
-</tr>
+</tr> -->
 
 
 <tr>
