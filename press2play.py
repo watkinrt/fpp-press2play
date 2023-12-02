@@ -1,4 +1,3 @@
-import paho.mqtt.client as mqtt
 from gpiozero import Button, PWMLED
 import subprocess
 import logging
