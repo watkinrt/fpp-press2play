@@ -26,3 +26,4 @@ This plugin requires two FPP-based devices: a primary *player* device (that is u
 ## Limitations
 
 - This plugin is only compatible with Raspberry Pi-based FPP devices.
+- Requires FPP v7 or higher.
