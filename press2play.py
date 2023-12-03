@@ -1,13 +1,14 @@
 from gpiozero import Button, PWMLED
 import subprocess
 import logging
+from logging.handlers import RotatingFileHandler
 import json
 from jsonschema import validate
 import requests
 from pathlib import Path
-import socket
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Timer
+from datetime import datetime
 
 # Watchdog flag
 watchdog = False
@@ -19,19 +20,20 @@ class RepeatTimer(Timer):
 
 # Setup logging
 # logging.basicConfig()
-logging.basicConfig(level=logging.INFO, 
-                    filename='/home/fpp/media/logs/press2play.log', filemode='w', 
-                    format='%(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-# logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.DEBUG)
+# create file handler which logs even debug messages
+fh = RotatingFileHandler('/home/fpp/media/logs/press2play.log', maxBytes=20000000, backupCount=5)
+fh.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+fh.setFormatter(formatter)
+logger.addHandler(fh)
 
-# Global FPP status string (falcon/player/{hostname}/status)
-fppStatus = ''
 
-# Get the hostname, which is used in the MQTT topics
-output = subprocess.run(["hostname"], capture_output=True)
-hostname = output.stdout
-logger.debug(f"FPP hostname: {hostname}")
+# # Get the hostname, which is used in the MQTT topics
+# output = subprocess.run(["hostname"], capture_output=True)
+# hostname = output.stdout
+# logger.debug(f"FPP hostname: {hostname}")
 
 # Load config file
 with open(Path(__file__).parent / Path("config.json"), "r") as f:
@@ -222,7 +224,9 @@ def setVolume(volume):
         volume = 100
 
     logger.debug(f"Setting volume to {volume}")
-    subprocess.run(['/opt/fpp/src/fpp', '-v', f'{volume}'])
+    subprocess.run(['/opt/fpp/src/fpp', '-v', f'{volume}'],
+                   stdout=subprocess.DEVNULL,
+                   stderr=subprocess.STDOUT)
 
 def setStatusLights(status):
     """ Set the kiosk status lights state """
@@ -244,7 +248,7 @@ def fppdStatus():
     logger.debug(f"Press2play status: {status}.")
     return status
 
-def toggleState():
+def toggleState(log=False):
     """ Toggle the current kiosk state """
     global maxvolume
 
@@ -264,6 +268,12 @@ def toggleState():
         setStatusLights(False)
         setVolume(maxvolume)
 
+        # Log the response
+        if log:
+            with open(Path(__file__).parent / Path("counter.csv"), "a") as f:
+                f.write(f"{datetime.now()}, {log}\n")
+
+
 def onButtonPress():
     """ Update volume and status state when the button is pressed """
     # global maxvolume
@@ -271,7 +281,7 @@ def onButtonPress():
     logger.debug("Press2play button pressed.")
     status = fppdStatus()
     if status["current_sequence"]:
-        toggleState()
+        toggleState(log=status["current_sequence"])
     else:
         setVolume(0)
         setStatusLights(False)
