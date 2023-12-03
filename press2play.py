@@ -18,9 +18,12 @@ class RepeatTimer(Timer):
             self.function(*self.args, **self.kwargs)
 
 # Setup logging
-logging.basicConfig()
+# logging.basicConfig()
+logging.basicConfig(level=logging.INFO, 
+                    filename='/home/fpp/media/logs/press2play.log', filemode='w', 
+                    format='%(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+# logger.setLevel(logging.DEBUG)
 
 # Global FPP status string (falcon/player/{hostname}/status)
 fppStatus = ''
@@ -186,18 +189,21 @@ else:
     #     raise RuntimeError(f"Unable to restart FPPD")
 
 # Make sure the primary player is setup to emit multisync packets
-r = requests.get(f"http://{playerhost}/api/settings/MultiSyncEnabled")
-settings = json.loads(r.text)
-logger.debug(f"Player MultiSync mode: {settings}.")
-if settings["value"] == "1":
-    logger.debug("Player MultiSync already setup.")
-else:
-    logger.debug("Player not emmitting multisync packets. Enabling.")
-    setFppSetting(playerhost, "MultiSyncEnabled", "1")
-    # # Restart FPP for the settings to take hold
-    # r = requests.get(f"http://{playerhost}/api/system/fppd/restart")
-    # if "OK" not in r.text:
-    #     raise RuntimeError(f"Unable to restart FPPD on player")
+try:
+    r = requests.get(f"http://{playerhost}/api/settings/MultiSyncEnabled")
+    settings = json.loads(r.text)
+    logger.debug(f"Player MultiSync mode: {settings}.")
+    if settings["value"] == "1":
+        logger.debug("Player MultiSync already setup.")
+    else:
+        logger.debug("Player not emmitting multisync packets. Enabling.")
+        setFppSetting(playerhost, "MultiSyncEnabled", "1")
+        # # Restart FPP for the settings to take hold
+        # r = requests.get(f"http://{playerhost}/api/system/fppd/restart")
+        # if "OK" not in r.text:
+        #     raise RuntimeError(f"Unable to restart FPPD on player")
+except:
+    logger.warning("Unable to communicate with player. Skipping MultiSync check.")
 
 def setVolume(volume):
     """ Adjust FPP volume 
