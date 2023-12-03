@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Copy script to FPP scripts directory
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+cd ${SCRIPT_DIR}
+cp "press2playRequest.sh" "../../../scripts/"
+
+# Get the root FPP directory
 BASEDIR=$(dirname $0)
 cd $BASEDIR
 cd ..
